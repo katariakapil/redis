@@ -1,17 +1,25 @@
 package com.kapil.redis;
 
+import com.kapil.redis.entity.Kapil;
 import com.kapil.redis.entity.Role;
 import com.kapil.redis.entity.Student;
 import com.kapil.redis.repository.StudentRepository;
+import org.apache.commons.collections4.ListUtils;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
@@ -104,5 +112,105 @@ public class RedisApplicationTests {
        // studentRepository.deleteAll();
 
     }
+
+
+    //Time taken 1722Ms
+    //Time taken 1745Ms
+
+    @Test
+    public void writeWithPipeline(){
+
+
+        List<String> data = new ArrayList();
+
+        for (int i=0;i<10000;i++){
+            data.add(""+i);
+        }
+
+        long start = System.currentTimeMillis();
+
+        List<List<String>> batches = ListUtils.partition(new ArrayList<>(data), 5);
+
+        for (List<String> batch : batches) {
+
+            redisTemplate.executePipelined((RedisCallback<Object>) conn -> {
+
+                for (String key : batch) {
+
+                    String redisKey = "Pipeline"+key;
+                    conn.set(redisTemplate.getKeySerializer().serialize(redisKey),
+                            redisTemplate.getValueSerializer().serialize( new Kapil(redisKey, "Kapil Kataria")
+                            ));
+                }
+
+                return null;
+            });
+
+
+        }
+
+        long end = System.currentTimeMillis();
+
+        System.out.println( "Time taken "+ (end -start) + "Ms");
+
+    }
+
+    //Time taken 51917Ms
+
+    @Test
+    public void writeWithSpringDataRedis(){
+
+
+        List<String> data = new ArrayList();
+
+        long start = System.currentTimeMillis();
+
+        for (int i=0;i<10000;i++){
+
+            Student student = new Student(
+                    "StudentGen"+i, "Kapil Kataria", Student.Gender.MALE, 1, "9090", new Role("Student2","NEW"));
+
+            studentRepository.save(student);
+
+        }
+
+
+        long end = System.currentTimeMillis();
+
+        System.out.println( "Time taken "+ (end -start) + "Ms");
+
+    }
+
+    //Time taken 58Ms
+    @Test
+    public  void getStudentPipelineData(){
+
+        long start = System.currentTimeMillis();
+
+        ValueOperations<String, Object> values = redisTemplate.opsForValue();
+
+        Object realData = values.get("Pipeline3");
+        System.out.println("Data is "+realData);
+
+        long end = System.currentTimeMillis();
+
+        System.out.println( "Time taken "+ (end -start) + "Ms");
+
+    }
+
+    //Time taken 102Ms
+    @Test
+    public  void findStudentData(){
+
+        long start = System.currentTimeMillis();
+
+        Optional<Student> student = studentRepository.findById("StudentGen2");
+        System.out.println(student.get().getId());
+
+        long end = System.currentTimeMillis();
+        System.out.println( "Time taken "+ (end -start) + "Ms");
+    }
+
+
 }
 
